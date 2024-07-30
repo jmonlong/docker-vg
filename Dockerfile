@@ -1,4 +1,4 @@
-FROM ubuntu:18.04
+FROM ubuntu:20.04
 MAINTAINER jmonlong@ucsc.edu
 
 # Prevent dpkg from trying to ask any questions, ever
@@ -15,7 +15,6 @@ RUN apt-get update \
         python3-dev \
         make \
         pigz \
-        tabix \
         libncurses5-dev libncursesw5-dev \
         zlib1g-dev libbz2-dev liblzma-dev \
         && rm -rf /var/lib/apt/lists/*
@@ -29,18 +28,25 @@ RUN apt-get update \
         bzip2 \
         && rm -rf /var/lib/apt/lists/*
 
+WORKDIR /opt
+
 ## bcftools
-RUN wget --no-check-certificate https://github.com/samtools/bcftools/releases/download/1.10.2/bcftools-1.10.2.tar.bz2 && \
-        tar -xjf bcftools-1.10.2.tar.bz2 && \
-        cd bcftools-1.10.2 && \
+RUN wget --no-check-certificate https://github.com/samtools/bcftools/releases/download/1.20/bcftools-1.20.tar.bz2 && \
+        tar -xjf bcftools-1.20.tar.bz2 && \
+        cd bcftools-1.20 && \
         ./configure && make && make install && \
-        cd .. && rm -rf bcftools-1.10.2 bcftools-1.10.2.tar.bz2
+        cd .. && rm -rf bcftools-1.20.tar.bz2
+
+## samtools
+RUN wget --no-check-certificate https://github.com/samtools/samtools/releases/download/1.20/samtools-1.20.tar.bz2 && \
+        tar -xjf samtools-1.20.tar.bz2 && \
+        cd samtools-1.20 && \
+        ./configure && make && make install && \
+        cd .. && rm -rf samtools-1.20.tar.bz2
 
 ##
 ## vg
 ##
-ARG vg_git_revision=6c7450a0ff37d1894c016fb7ef87a6b9a80898a4
-ARG THREADS=4
 
 # Install the base packages needed to let vg install packages.
 # Make sure this runs after vg sources are imported so vg will always have an
@@ -57,8 +63,11 @@ RUN apt-get -qq -y update && \
         pkg-config \
         git
 
+ARG vg_git_revision=c79123c01ef5309c1eab1037c5b1a7e09533aabb
+ARG THREADS=4
+
 # fetch the desired git revision of vg
-RUN git clone https://github.com/vgteam/vg.git /vg
+RUN git clone https://github.com/jmonlong/vg.git /vg
 WORKDIR /vg
 RUN git fetch --tags origin && git checkout "$vg_git_revision" && git submodule update --init --recursive
 
@@ -74,10 +83,8 @@ RUN bash -c "[[ -e deps/sdsl-lite/CMakeLists.txt ]] || git submodule update --in
 # Do the build. Trim down the resulting binary but make sure to include enough debug info for profiling.
 # RUN make get-deps && . ./source_me.sh && env && make include/vg_git_version.hpp && CXXFLAGS=" -march=nehalem " make -j $((THREADS < $(nproc) ? THREADS : $(nproc))) && make static && strip -d bin/vg
 
-RUN make get-deps && . ./source_me.sh && env && make include/vg_git_version.hpp && make -j $((THREADS < $(nproc) ? THREADS : $(nproc))) && make static && strip -d bin/vg
+RUN make get-deps && . ./source_me.sh && env && make -j $((THREADS < $(nproc) ? THREADS : $(nproc))) && make static && strip -d bin/vg
 
 ENV PATH /vg/bin:$PATH
-
-RUN rm /vg/bin/bgzip /vg/bin/tabix
 
 WORKDIR /home
